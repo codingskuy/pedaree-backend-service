@@ -1,10 +1,18 @@
 //! pedaree-backend-service: sumber kebenaran stok dapur (FEFO) Pedaree.
 
+#[macro_use]
+mod makro;
+
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod idempotensi;
+pub mod model;
+pub mod pantry;
+pub mod satuan;
 pub mod state;
+pub mod waktu;
 
 use std::time::Duration;
 
@@ -38,6 +46,7 @@ pub fn rute(state: AppState) -> Router {
     Router::new()
         .route("/kesehatan", get(sehat))
         .merge(auth::rute())
+        .merge(pantry::rute())
         .fallback(rute_tidak_ada)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,

@@ -17,6 +17,18 @@ async fn main() {
         .expect("gagal menyambung ke basis data");
     db::migrasi(&pool).await.expect("migrasi gagal");
 
+    // Catatan idempotensi > 24 jam dibersihkan tiap jam.
+    let pembersih = pool.clone();
+    tokio::spawn(async move {
+        let mut detak = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            detak.tick().await;
+            if let Err(e) = pedaree_backend_service::idempotensi::bersihkan(&pembersih).await {
+                tracing::warn!(galat = %e, "gagal membersihkan idempotensi");
+            }
+        }
+    });
+
     let state = AppState::baru(pool, config.clone()).expect("kunci JWT tidak valid");
     let app = rute(state);
     let pendengar = tokio::net::TcpListener::bind(&config.bind_addr)
