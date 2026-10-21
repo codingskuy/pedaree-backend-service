@@ -165,7 +165,11 @@ async fn login_dengan_karakter_nul_menjawab_400_bukan_500(db: PgPool) {
         json!({"idPengguna": "bu\u{0}di", "kataSandi": "rahasia-banget-123"}),
     )
     .await;
-    assert_eq!((s, j["kode"].as_str()), (400, Some("VALIDASI_GAGAL")), "{j}");
+    assert_eq!(
+        (s, j["kode"].as_str()),
+        (400, Some("VALIDASI_GAGAL")),
+        "{j}"
+    );
 }
 
 #[sqlx::test]
