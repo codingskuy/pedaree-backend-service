@@ -6,6 +6,7 @@ mod makro;
 pub mod auth;
 pub mod cli;
 pub mod config;
+pub mod dasbor;
 pub mod db;
 pub mod error;
 pub mod idempotensi;
@@ -50,6 +51,7 @@ pub fn rute(state: AppState) -> Router {
         .route("/kesehatan", get(sehat))
         .merge(auth::rute())
         .merge(pantry::rute())
+        .merge(dasbor::rute())
         .fallback(rute_tidak_ada)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
