@@ -115,6 +115,32 @@ pub fn jam_tetap() -> Jam {
     Arc::new(move || t)
 }
 
+/// Jam uji yang bisa dimajukan (untuk dedup 24 jam, retry, dsb).
+#[derive(Clone)]
+pub struct JamUji(Arc<std::sync::Mutex<DateTime<Utc>>>);
+
+impl JamUji {
+    pub fn baru() -> Self {
+        Self(Arc::new(std::sync::Mutex::new(
+            Utc.with_ymd_and_hms(2026, 10, 21, 5, 0, 0).unwrap(),
+        )))
+    }
+
+    pub fn jam(&self) -> Jam {
+        let dalam = self.0.clone();
+        Arc::new(move || *dalam.lock().unwrap())
+    }
+
+    pub fn sekarang(&self) -> DateTime<Utc> {
+        *self.0.lock().unwrap()
+    }
+
+    pub fn majukan(&self, durasi: chrono::Duration) {
+        let mut t = self.0.lock().unwrap();
+        *t += durasi;
+    }
+}
+
 pub struct Klien {
     pub app: Router,
     pub db: PgPool,
@@ -127,7 +153,15 @@ impl Klien {
         Self::untuk(db, HH, "budi").await
     }
 
+    pub async fn dengan_jam(db: &PgPool, jam: Jam) -> Self {
+        Self::untuk_jam(db, HH, "budi", jam).await
+    }
+
     pub async fn untuk(db: &PgPool, household: &str, pengguna: &str) -> Self {
+        Self::untuk_jam(db, household, pengguna, jam_tetap()).await
+    }
+
+    pub async fn untuk_jam(db: &PgPool, household: &str, pengguna: &str, jam: Jam) -> Self {
         buat_pengguna(
             db,
             household,
@@ -137,7 +171,7 @@ impl Klien {
         )
         .await
         .unwrap();
-        let state = state(db.clone()).dengan_jam(jam_tetap());
+        let state = state(db.clone()).dengan_jam(jam);
         let app = rute(state);
         let (s, j) = post(
             &app,
