@@ -646,7 +646,16 @@ webhooks:
 
         - **Jenis terkunci (3):** `stok.menipis`, `stok.habis`, `kedaluwarsa.dekat`.
         - **Pemicu + dedup produsen:** transisi ke menipis dan ke habis, serta kedaluwarsa dekat;
-          maksimal **1 sinyal per item per 24 jam** (BR-301).
+          maksimal **1 sinyal per item per 24 jam** (BR-301), berlaku lintas jenis (selaras
+          kunci idempoten konsumen `item_id + tanggal`). Menipis = stok yang dapat dipakai turun
+          dari di atas `stokMinimum` ke `<= stokMinimum` (dan > 0); habis = turun ke 0 (dari
+          mana pun, satu sinyal saja). Kedaluwarsa dekat = batch yang tersisa 0 sampai 3 hari
+          (SOP SEGERA/HARI_INI), dievaluasi job `expiry-sweep` setiap hari pukul 06:00 WIB.
+        - **Isi payload:** `sisa` dan `satuan` dalam satuan simpan item. `kedaluwarsa` = batch
+          terdekat yang masih dapat dipakai; bila stok habis atau item tanpa tanggal kedaluwarsa,
+          tanggal batch terakhir atau, jika tidak ada, tanggal sinyal (kontrak mewajibkan field
+          ini). Untuk `kedaluwarsa.dekat`, `sisa` = jumlah batch dalam jendela 3 hari.
+          `recipe_id` terisi bila pemicunya `POST /pantry/consume` dengan `sumberResepId`.
         - **Payload wajib:** `item`, `sisa`, `satuan` (13 baku), `kedaluwarsa`, `recipe_id` Pawonee
           (boleh kosong), ditambah `jenis`, `item_id`, `tanggal` (kunci idempoten konsumen).
         - **Header:** `X-Service-Key` (service key least-privilege milik Pedaree).
@@ -654,7 +663,11 @@ webhooks:
           (`item_id + tanggal`) `200 {"status":"duplikat_diabaikan"}` bukan galat; `422
           JENIS_SINYAL_TIDAK_DIKENAL` untuk jenis di luar tiga.
         - **Sifat:** anjuran restock saja — TIDAK PERNAH membuat pesanan otomatis; relevansi 48 jam.
-        - **Kegagalan:** retry 3x (5/30/300 detik) lalu DLQ.
+        - **Kegagalan:** sinyal ditulis ke outbox pada transaksi yang sama dengan mutasi stok
+          (kegagalan TitipO tidak mengganggu pencatatan stok). Kegagalan sementara (jaringan,
+          5xx, 408, 429): retry 3x dengan jeda 5/30/300 detik lalu DLQ. Kegagalan permanen
+          (4xx lain, mis. `422 JENIS_SINYAL_TIDAK_DIKENAL`): langsung DLQ. `200 duplikat_diabaikan`
+          dianggap sukses.
       security:
         - serviceKey: []
       requestBody:
