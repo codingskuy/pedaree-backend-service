@@ -96,3 +96,147 @@ pub async fn kirim(
 pub async fn post(app: &Router, path: &str, badan: Value) -> (u16, Value) {
     kirim(app, Method::POST, path, &[], Some(badan)).await
 }
+
+// ---------------------------------------------------------------------------
+// Klien uji terautentikasi dengan jam tetap (hari ini WIB = 2026-10-21).
+
+use std::sync::Arc;
+
+use chrono::{DateTime, TimeZone, Utc};
+use pedaree_backend_service::auth::buat_pengguna;
+use pedaree_backend_service::rute;
+use pedaree_backend_service::waktu::Jam;
+use serde_json::json;
+
+pub const HARI_INI: &str = "2026-10-21";
+
+pub fn jam_tetap() -> Jam {
+    let t: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 10, 21, 5, 0, 0).unwrap();
+    Arc::new(move || t)
+}
+
+pub struct Klien {
+    pub app: Router,
+    pub db: PgPool,
+    pub token: String,
+    pub household: String,
+}
+
+impl Klien {
+    pub async fn baru(db: &PgPool) -> Self {
+        Self::untuk(db, HH, "budi").await
+    }
+
+    pub async fn untuk(db: &PgPool, household: &str, pengguna: &str) -> Self {
+        buat_pengguna(
+            db,
+            household,
+            pengguna,
+            "rahasia-banget-123",
+            &argon_murah(),
+        )
+        .await
+        .unwrap();
+        let state = state(db.clone()).dengan_jam(jam_tetap());
+        let app = rute(state);
+        let (s, j) = post(
+            &app,
+            "/auth/login",
+            json!({"idPengguna": pengguna, "kataSandi": "rahasia-banget-123"}),
+        )
+        .await;
+        assert_eq!(s, 200, "{j}");
+        Self {
+            app,
+            db: db.clone(),
+            token: j["tokenAkses"].as_str().unwrap().to_owned(),
+            household: household.to_owned(),
+        }
+    }
+
+    fn header(&self, rid: Option<&str>) -> Vec<(String, String)> {
+        let mut h = vec![
+            ("authorization".to_owned(), format!("Bearer {}", self.token)),
+            ("x-household-id".to_owned(), self.household.clone()),
+        ];
+        if let Some(r) = rid {
+            h.push(("x-request-id".to_owned(), r.to_owned()));
+        }
+        h
+    }
+
+    pub async fn kirim(
+        &self,
+        metode: Method,
+        path: &str,
+        rid: Option<&str>,
+        badan: Option<Value>,
+    ) -> (u16, Value) {
+        let h = self.header(rid);
+        let h: Vec<(&str, &str)> = h.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        kirim(&self.app, metode, path, &h, badan).await
+    }
+
+    pub async fn get(&self, path: &str) -> (u16, Value) {
+        self.kirim(Method::GET, path, None, None).await
+    }
+
+    /// POST dengan X-Request-Id baru.
+    pub async fn post(&self, path: &str, badan: Value) -> (u16, Value) {
+        let rid = uuid::Uuid::new_v4().to_string();
+        self.kirim(Method::POST, path, Some(&rid), Some(badan))
+            .await
+    }
+
+    pub async fn post_rid(&self, path: &str, rid: &str, badan: Value) -> (u16, Value) {
+        self.kirim(Method::POST, path, Some(rid), Some(badan)).await
+    }
+
+    /// Membuat item lewat API dan mengembalikan id-nya.
+    pub async fn item(&self, nama: &str, satuan: &str, minimum: f64, umur: i64) -> String {
+        let (s, j) = self
+            .post(
+                "/pantry/items",
+                json!({"nama": nama, "kategori": "KERING", "satuanSimpan": satuan, "satuanTampil": satuan,
+                       "stokMinimum": minimum, "umurSimpanHariDefault": umur, "lokasiDefault": "SUHU_RUANG"}),
+            )
+            .await;
+        assert_eq!(s, 201, "{j}");
+        j["id"].as_str().unwrap().to_owned()
+    }
+
+    /// Mencatat masuk lewat API; `masuk` dan `kdl` berupa YYYY-MM-DD.
+    pub async fn masuk(
+        &self,
+        item: &str,
+        jumlah: f64,
+        satuan: &str,
+        masuk: &str,
+        kdl: Option<&str>,
+    ) -> String {
+        let (s, j) = self
+            .post(
+                "/pantry/batches",
+                json!({"pantryItemId": item, "jumlah": jumlah, "satuan": satuan, "tanggalMasuk": masuk,
+                       "tanggalKedaluwarsa": kdl, "lokasi": "SUHU_RUANG", "sumber": "MASUK_BELANJA"}),
+            )
+            .await;
+        assert_eq!(s, 201, "{j}");
+        j["id"].as_str().unwrap().to_owned()
+    }
+
+    pub async fn aktif_x10(&self, batch: &str) -> i64 {
+        sqlx::query_scalar("SELECT jumlah_aktif_x10 FROM stok_batch WHERE id = $1")
+            .bind(batch)
+            .fetch_one(&self.db)
+            .await
+            .unwrap()
+    }
+
+    pub async fn jumlah_mutasi(&self) -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM mutasi_stok")
+            .fetch_one(&self.db)
+            .await
+            .unwrap()
+    }
+}
