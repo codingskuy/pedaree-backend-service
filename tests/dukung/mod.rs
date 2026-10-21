@@ -135,6 +135,10 @@ impl JamUji {
         *self.0.lock().unwrap()
     }
 
+    pub fn atur(&self, waktu: DateTime<Utc>) {
+        *self.0.lock().unwrap() = waktu;
+    }
+
     pub fn majukan(&self, durasi: chrono::Duration) {
         let mut t = self.0.lock().unwrap();
         *t += durasi;

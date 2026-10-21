@@ -195,7 +195,7 @@ async fn pakai_sampai_habis_menulis_stok_habis(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn maksimal_satu_sinyal_per_item_per_24_jam(db: PgPool) {
+async fn maksimal_satu_sinyal_per_item_per_jenis_per_24_jam(db: PgPool) {
     let jam = JamUji::baru();
     let k = Klien::dengan_jam(&db, jam.jam()).await;
     let item = k.item("Tomat", "gram", 100.0, 5).await;
@@ -204,25 +204,68 @@ async fn maksimal_satu_sinyal_per_item_per_24_jam(db: PgPool) {
     pakai(&k, &item, 250.0, "gram", None).await; // menipis
     assert_eq!(sinyal_rows(&db).await.len(), 1);
 
-    // menipis -> habis dalam 24 jam: ditekan (satu sinyal per item per 24 jam)
+    // menipis -> habis dalam 24 jam: jenis berbeda, dua-duanya terkirim (ADR-0010 pembaruan)
     pakai(&k, &item, 50.0, "gram", None).await;
-    assert_eq!(sinyal_rows(&db).await.len(), 1);
+    let v = sinyal_rows(&db).await;
+    assert_eq!(v.len(), 2);
+    assert_eq!(v[1].jenis, "stok.habis");
 
-    // isi lagi lalu menipis lagi pada jam ke-23: tetap ditekan
+    // isi lagi lalu menipis lagi pada jam ke-23: jenis sama dalam 24 jam, ditekan
     k.masuk(&item, 300.0, "gram", HARI_INI, Some("2026-10-30"))
         .await;
     jam.majukan(Duration::hours(23));
     pakai(&k, &item, 250.0, "gram", None).await;
-    assert_eq!(sinyal_rows(&db).await.len(), 1);
+    assert_eq!(sinyal_rows(&db).await.len(), 2);
 
-    // lewat 24 jam sejak sinyal pertama: transisi berikutnya dikirim
+    // habis lagi pada jam ke-23: jenis sama, ditekan
+    pakai(&k, &item, 50.0, "gram", None).await;
+    assert_eq!(sinyal_rows(&db).await.len(), 2);
+
+    // lewat 24 jam sejak sinyal pertama: menipis berikutnya dikirim
     k.masuk(&item, 300.0, "gram", HARI_INI, Some("2026-10-30"))
         .await;
     jam.majukan(Duration::hours(2));
-    pakai(&k, &item, 350.0, "gram", None).await;
+    pakai(&k, &item, 250.0, "gram", None).await;
     let v = sinyal_rows(&db).await;
-    assert_eq!(v.len(), 2);
-    assert_eq!(v[1].jenis, "stok.habis");
+    assert_eq!(v.len(), 3);
+    assert_eq!(v[2].jenis, "stok.menipis");
+}
+
+/// Keputusan 2026-10-21: minimum 250 g, 500 -> 200 g pukul 08:00 WIB (menipis), lalu -> 0 pukul
+/// 19:00 WIB (habis) pada hari yang sama menghasilkan DUA sinyal; kunci berbeda karena jenis.
+#[sqlx::test]
+async fn menipis_pagi_lalu_habis_malam_hari_sama_menghasilkan_dua_sinyal(db: PgPool) {
+    let jam = JamUji::baru();
+    jam.atur(Utc.with_ymd_and_hms(2026, 10, 21, 1, 0, 0).unwrap()); // 08:00 WIB
+    let k = Klien::dengan_jam(&db, jam.jam()).await;
+    let item = k.item("Beras", "gram", 250.0, 30).await;
+    k.masuk(&item, 500.0, "gram", HARI_INI, Some("2026-12-01"))
+        .await;
+    pakai(&k, &item, 300.0, "gram", None).await; // 500 -> 200 g
+    jam.atur(Utc.with_ymd_and_hms(2026, 10, 21, 12, 0, 0).unwrap()); // 19:00 WIB
+    pakai(&k, &item, 200.0, "gram", None).await; // 200 -> 0 g
+
+    let v = sinyal_rows(&db).await;
+    assert_eq!(v.len(), 2, "menipis dan habis sama-sama terkirim");
+    assert_eq!(
+        (v[0].jenis.as_str(), v[1].jenis.as_str()),
+        ("stok.menipis", "stok.habis")
+    );
+    assert_eq!(v[0].payload["tanggal"], HARI_INI);
+    assert_eq!(v[1].payload["tanggal"], HARI_INI);
+    assert_eq!(v[0].payload["item_id"], v[1].payload["item_id"]);
+    assert_eq!(v[0].payload["sisa"], 200.0);
+    assert_eq!(v[1].payload["sisa"], 0.0);
+
+    // kunci idempoten (item_id, jenis, tanggal) unik di basis data
+    let ganda = sqlx::query(
+        "INSERT INTO sinyal_stok (id, household_id, item_id, jenis, tanggal, payload)
+         SELECT 'sig_ganda', household_id, item_id, jenis, tanggal, payload
+           FROM sinyal_stok WHERE jenis = 'stok.habis'",
+    )
+    .execute(&db)
+    .await;
+    assert!(ganda.is_err(), "kunci item_id+jenis+tanggal harus unik");
 }
 
 #[sqlx::test]
@@ -371,7 +414,7 @@ async fn expiry_sweep_membuat_kedaluwarsa_dekat_sekali_per_item(db: PgPool) {
         .await;
     let garam = k.item("Garam", "gram", 10.0, 0).await;
     k.masuk(&garam, 100.0, "gram", HARI_INI, None).await;
-    // Telur sudah punya sinyal menipis (24 jam terakhir): ditekan
+    // Telur sudah punya sinyal menipis; jenis kedaluwarsa.dekat dedup terpisah, jadi TETAP dibuat
     let telur = k.item("Telur Ayam", "pcs", 6.0, 14).await;
     k.masuk(&telur, 10.0, "pcs", "2026-10-19", Some("2026-10-22"))
         .await;
@@ -379,10 +422,10 @@ async fn expiry_sweep_membuat_kedaluwarsa_dekat_sekali_per_item(db: PgPool) {
     assert_eq!(sinyal_rows(&db).await.len(), 1);
 
     let dibuat = sinyal::expiry_sweep(&db, jam.sekarang()).await.unwrap();
-    assert_eq!(dibuat, 2);
+    assert_eq!(dibuat, 3);
     let v = sinyal_rows(&db).await;
     let dekat = ambil(&v, "kedaluwarsa.dekat");
-    assert_eq!(dekat.len(), 2);
+    assert_eq!(dekat.len(), 3);
     let untuk = |id: &str| {
         dekat
             .iter()
@@ -399,11 +442,11 @@ async fn expiry_sweep_membuat_kedaluwarsa_dekat_sekali_per_item(db: PgPool) {
     assert_eq!(p["tanggal"], HARI_INI);
     assert!(p["recipe_id"].is_null());
     assert_eq!(untuk(&bayam)["kedaluwarsa"], HARI_INI);
-    assert!(dekat.iter().all(|s| s.payload["item_id"] != telur.as_str()));
+    assert_eq!(untuk(&telur)["tanggal"], HARI_INI);
 
     // eksekusi ulang: tidak ada sinyal ganda
     assert_eq!(sinyal::expiry_sweep(&db, jam.sekarang()).await.unwrap(), 0);
-    assert_eq!(sinyal_rows(&db).await.len(), 3);
+    assert_eq!(sinyal_rows(&db).await.len(), 4);
     // 25 jam kemudian (mundur satu hari batch): item yang masih dekat dikirim lagi
     jam.majukan(Duration::hours(25));
     assert!(sinyal::expiry_sweep(&db, jam.sekarang()).await.unwrap() >= 1);

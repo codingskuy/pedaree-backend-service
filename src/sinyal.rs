@@ -2,8 +2,8 @@
 //!
 //! Pemicu: transisi ke menipis/habis setelah mutasi stok, dan `kedaluwarsa.dekat` dari job
 //! `expiry-sweep` harian. Sinyal ditulis ke outbox `sinyal_stok` pada transaksi yang sama
-//! dengan mutasi; pengiriman dilakukan `pengirim`. Maksimal 1 sinyal per item per 24 jam
-//! (BR-301). Sinyal hanyalah ANJURAN restock: tidak ada kode di repo ini yang membuat
+//! dengan mutasi; pengiriman dilakukan `pengirim`. Maksimal 1 sinyal per item PER JENIS per
+//! 24 jam (BR-301, ADR-0010 bagian pembaruan); kunci idempoten konsumen `item_id + jenis + tanggal`. Sinyal hanyalah ANJURAN restock: tidak ada kode di repo ini yang membuat
 //! pesanan TitipO.
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -68,7 +68,8 @@ async fn kedaluwarsa_untuk_payload(
     Ok(terakhir.unwrap_or(hari_ini))
 }
 
-/// Menulis sinyal ke outbox kecuali sudah ada sinyal item ini dalam 24 jam terakhir.
+/// Menulis sinyal ke outbox kecuali sudah ada sinyal item ini dengan JENIS yang sama dalam
+/// 24 jam terakhir (menipis dan habis dedup sendiri-sendiri).
 /// Mengembalikan `true` bila sinyal dibuat. Harus dipanggil pada transaksi yang sudah
 /// menahan kunci baris item (mutasi) atau mengambilnya sendiri (sweep).
 pub async fn antrekan(
@@ -86,10 +87,12 @@ pub async fn antrekan(
         .await?;
     let ada: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM sinyal_stok
-                         WHERE item_id = $1 AND dibuat_pada > $2::timestamptz - interval '24 hours')",
+                         WHERE item_id = $1 AND jenis = $3
+                           AND dibuat_pada > $2::timestamptz - interval '24 hours')",
     )
     .bind(&item.id)
     .bind(sekarang)
+    .bind(jenis.as_str())
     .fetch_one(&mut *conn)
     .await?;
     if ada {
@@ -159,7 +162,7 @@ struct Kandidat {
 }
 
 /// Mengevaluasi seluruh item: yang punya batch kedaluwarsa 0..=3 hari menghasilkan
-/// `kedaluwarsa.dekat` (bila belum ada sinyal item tersebut dalam 24 jam). Mengembalikan
+/// `kedaluwarsa.dekat` (bila belum ada sinyal jenis itu untuk item tersebut dalam 24 jam). Mengembalikan
 /// jumlah sinyal yang dibuat. `sisa` = jumlah batch yang kedaluwarsa dalam jendela itu.
 pub async fn expiry_sweep(db: &PgPool, sekarang: DateTime<Utc>) -> Result<usize, AppError> {
     let hari_ini = hari_ini_wib(sekarang);

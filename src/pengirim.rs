@@ -93,7 +93,7 @@ async fn kirim_satu(klien: &Client, tujuan: &Tujuan, payload: &Value) -> Hasil {
                 .unwrap_or("dicatat_sebagai_anjuran")
                 .to_owned(),
         ),
-        // Duplikat (item_id + tanggal) bukan galat.
+        // Duplikat (item_id + jenis + tanggal) bukan galat.
         StatusCode::OK => Hasil::Terkirim(
             badan["status"]
                 .as_str()
