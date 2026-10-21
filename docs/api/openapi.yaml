@@ -144,7 +144,7 @@ paths:
               type: object
               required: [tokenRefresh]
               properties:
-                tokenRefresh: { type: string }
+                tokenRefresh: { type: string, minLength: 1 }
       responses:
         '200':
           description: Pasangan token baru.
@@ -164,7 +164,6 @@ paths:
       description: Daftar ringkas item aktif dengan status stok dan batch terdekat kedaluwarsa. Paginasi kursor.
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: q, in: query, description: "Cari nama bahan.", schema: { type: string } }
         - { name: kategori, in: query, schema: { $ref: '#/components/schemas/Kategori' } }
         - { name: statusStok, in: query, schema: { $ref: '#/components/schemas/StatusStok' } }
@@ -183,6 +182,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/PantryItemRingkas' }
                   nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '429': { $ref: '#/components/responses/BatasLaju' }
         '500': { $ref: '#/components/responses/GalatServer' }
@@ -234,7 +234,6 @@ paths:
       description: Batch yang masih berisi (`jumlahAktif > 0`) urut FEFO; `stokTampil` hanya menghitung batch yang dapat dipakai (AKTIF, belum kedaluwarsa).
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: id, in: path, required: true, schema: { type: string, examples: [itm_01J9Z8QK2M4A] } }
       responses:
         '200':
@@ -242,6 +241,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PantryItemDetail' }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '404': { $ref: '#/components/responses/TidakAda' }
         '500': { $ref: '#/components/responses/GalatServer' }
@@ -419,7 +419,6 @@ paths:
       summary: Batch mendekati kedaluwarsa (urut FEFO)
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: dalamHari, in: query, schema: { type: integer, minimum: 0, default: 7 } }
       responses:
         '200':
@@ -433,6 +432,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/BatchKedaluwarsa' }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '500': { $ref: '#/components/responses/GalatServer' }
   /demand/signals:
@@ -442,7 +442,6 @@ paths:
       summary: Riwayat sinyal demand yang pernah dipicu
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: sejak, in: query, description: "Waktu awal RFC3339 UTC.", schema: { type: string, format: date-time } }
       responses:
         '200':
@@ -456,6 +455,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/SinyalDemand' }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '500': { $ref: '#/components/responses/GalatServer' }
   /demand/titipo:
@@ -500,13 +500,13 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
       responses:
         '200':
           description: Ringkasan.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DasborWeb' }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '500': { $ref: '#/components/responses/GalatServer' }
   /web/import/csv:
@@ -549,7 +549,6 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: kategori, in: query, schema: { $ref: '#/components/schemas/Kategori' } }
       responses:
         '200':
@@ -557,6 +556,7 @@ paths:
           content:
             text/csv:
               schema: { type: string }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '500': { $ref: '#/components/responses/GalatServer' }
   /web/export/mutasi:
@@ -568,7 +568,6 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: dari, in: query, schema: { type: string, format: date } }
         - { name: sampai, in: query, schema: { type: string, format: date } }
       responses:
@@ -589,7 +588,6 @@ paths:
         - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - $ref: '#/components/parameters/XRequestId'
         - { name: status, in: query, schema: { type: string, enum: [DITERIMA], default: DITERIMA } }
       responses:
         '200':
@@ -603,6 +601,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/ParcelTitipo' }
+        '400': { $ref: '#/components/responses/Validasi' }
         '401': { $ref: '#/components/responses/TidakSah' }
         '500': { $ref: '#/components/responses/GalatServer' }
   /web/titipo/parcels/{id}/draft-masuk:
@@ -820,8 +819,8 @@ components:
       type: object
       required: [idPengguna, kataSandi]
       properties:
-        idPengguna: { type: string }
-        kataSandi: { type: string, format: password, writeOnly: true }
+        idPengguna: { type: string, minLength: 1 }
+        kataSandi: { type: string, format: password, writeOnly: true, minLength: 1 }
         idPerangkat: { type: string, description: Id perangkat terdaftar (opsional). }
     TokenPasangan:
       type: object
@@ -934,7 +933,7 @@ components:
               pantryItemId: { type: string }
               jumlah: { type: number, exclusiveMinimum: 0 }
               satuan: { $ref: '#/components/schemas/Satuan' }
-        sumberResepId: { type: [string, 'null'], description: ID resep Pawonee bila dari tombol `Masak ini`. }
+        sumberResepId: { type: [string, 'null'], minLength: 1, maxLength: 64, description: ID resep Pawonee bila dari tombol `Masak ini`. }
     PemakaianHasil:
       type: object
       required: [terpotong, kurang]
