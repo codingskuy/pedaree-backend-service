@@ -3,10 +3,26 @@ on: [push, pull_request]
 jobs:
   bangun:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pedaree
+          POSTGRES_PASSWORD: pedaree
+          POSTGRES_DB: pedaree
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pedaree"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Uji `#[sqlx::test]` membuat basis data sementara per uji; peran perlu hak CREATEDB.
+      DATABASE_URL: postgres://pedaree:pedaree@localhost:5432/pedaree
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions-rs/toolchain@v1.0.7
-        with: { toolchain: 1.84.1, override: true }
+        with: { toolchain: 1.84.1, override: true, components: "rustfmt, clippy" }
       - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
