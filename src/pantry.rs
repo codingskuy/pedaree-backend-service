@@ -428,7 +428,7 @@ async fn daftar_item(
             Some("limit"),
         ));
     }
-    let (kursor_nama, kursor_id) = match q.cursor.as_deref() {
+    let (kursor_nama, kursor_id) = match q.cursor.as_deref().filter(|c| !c.is_empty()) {
         Some(c) => {
             let (n, i) = baca_kursor(c)?;
             (Some(n), Some(i))

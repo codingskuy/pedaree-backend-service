@@ -1067,6 +1067,25 @@ async fn daftar_item_menghitung_stok_status_filter_dan_paginasi(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn daftar_item_kursor_kosong_dianggap_tidak_ada(db: PgPool) {
+    // Temuan Schemathesis (PDR-BE-TEST-SCHEMATHESIS): klien web lazim mengirim `cursor=` kosong
+    // pada halaman pertama; itu harus sama dengan tanpa kursor, bukan 400.
+    let k = Klien::baru(&db).await;
+    let (s, j) = k
+        .post(
+            "/pantry/items",
+            json!({"nama": "Beras", "kategori": "KERING", "satuanSimpan": "gram",
+                "satuanTampil": "gram", "stokMinimum": 2000, "umurSimpanHariDefault": 180,
+                "lokasiDefault": "SUHU_RUANG"}),
+        )
+        .await;
+    assert_eq!(s, 201, "{j}");
+    let (s, j) = k.get("/pantry/items?cursor=").await;
+    assert_eq!(s, 200, "{j}");
+    assert_eq!(arr(&j, "data").len(), 1);
+}
+
+#[sqlx::test]
 async fn daftar_item_menampilkan_stok_dalam_satuan_tampil(db: PgPool) {
     let k = Klien::baru(&db).await;
     let (_, j) = k
