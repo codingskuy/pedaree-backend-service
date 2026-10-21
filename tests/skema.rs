@@ -6,9 +6,10 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use pedaree_backend_service::db::MIGRATOR;
 use pedaree_backend_service::rute;
-use pedaree_backend_service::state::AppState;
 use sqlx::PgPool;
 use tower::ServiceExt;
+
+mod dukung;
 
 const HH: &str = "hh_01J9Z8QK2M4B";
 
@@ -50,7 +51,7 @@ fn kode_pg(e: &sqlx::Error) -> Option<String> {
 
 #[sqlx::test]
 async fn kesehatan_menjawab_ok_dengan_db_pedaree(db: PgPool) {
-    let app = rute(AppState::baru(db));
+    let app = rute(dukung::state(db));
     let res = app
         .oneshot(Request::get("/kesehatan").body(Body::empty()).unwrap())
         .await
@@ -64,7 +65,7 @@ async fn kesehatan_menjawab_ok_dengan_db_pedaree(db: PgPool) {
 
 #[sqlx::test]
 async fn rute_tak_dikenal_menjawab_galat_baku(db: PgPool) {
-    let app = rute(AppState::baru(db));
+    let app = rute(dukung::state(db));
     let res = app
         .oneshot(Request::get("/tidak-ada").body(Body::empty()).unwrap())
         .await
