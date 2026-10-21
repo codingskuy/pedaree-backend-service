@@ -1,5 +1,6 @@
 //! pedaree-backend-service: sumber kebenaran stok dapur (FEFO) Pedaree.
 
+pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -36,6 +37,7 @@ async fn sehat(State(state): State<AppState>) -> Result<Json<Sehat>, AppError> {
 pub fn rute(state: AppState) -> Router {
     Router::new()
         .route("/kesehatan", get(sehat))
+        .merge(auth::rute())
         .fallback(rute_tidak_ada)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,

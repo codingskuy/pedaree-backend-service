@@ -17,7 +17,8 @@ async fn main() {
         .expect("gagal menyambung ke basis data");
     db::migrasi(&pool).await.expect("migrasi gagal");
 
-    let app = rute(AppState::baru(pool));
+    let state = AppState::baru(pool, config.clone()).expect("kunci JWT tidak valid");
+    let app = rute(state);
     let pendengar = tokio::net::TcpListener::bind(&config.bind_addr)
         .await
         .expect("gagal mengikat port");
