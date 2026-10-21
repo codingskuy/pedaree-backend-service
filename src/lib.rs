@@ -11,6 +11,8 @@ pub mod db;
 pub mod error;
 pub mod idempotensi;
 pub mod model;
+#[cfg(feature = "pact-state")]
+pub mod pact_state;
 pub mod pantry;
 pub mod pengirim;
 pub mod satuan;
@@ -47,12 +49,15 @@ async fn sehat(State(state): State<AppState>) -> Result<Json<Sehat>, AppError> {
 
 /// Router aplikasi. Path memakai sintaks Axum 0.8 (`{id}`).
 pub fn rute(state: AppState) -> Router {
-    Router::new()
+    let rute = Router::new()
         .route("/kesehatan", get(sehat))
         .merge(auth::rute())
         .merge(pantry::rute())
-        .merge(dasbor::rute())
-        .fallback(rute_tidak_ada)
+        .merge(dasbor::rute());
+    // Hanya untuk verifikasi Pact lokal; fitur ini tidak boleh aktif di rilis.
+    #[cfg(feature = "pact-state")]
+    let rute = rute.merge(pact_state::rute());
+    rute.fallback(rute_tidak_ada)
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(30),
