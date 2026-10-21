@@ -1,11 +1,18 @@
 # Konfigurasi Schemathesis (PDR-BE-TEST-SCHEMATHESIS). Dibaca otomatis bila dijalankan dari akar repo.
 # Tanpa telemetri: tidak ada token/service Schemathesis.io di sini.
 
-# Aturan bisnis lintas-field yang tidak dapat diungkapkan JSON Schema (satuan hitung hanya sah
-# untuk komoditas di tabel bobot acuan, inventori/20) dijawab 422 SATUAN_TIDAK_BERLAKU: ini
-# penolakan yang didokumentasikan, bukan bug kontrak.
+# Aturan bisnis lintas-field yang tidak dapat diungkapkan JSON Schema dijawab 422 dengan kode
+# terdokumentasi: satuan hitung hanya sah untuk komoditas di tabel bobot acuan (inventori/20,
+# SATUAN_TIDAK_BERLAKU), batas 50.000 g/ml per batch bergantung satuan (JUMLAH_MELEBIHI_BATAS),
+# batas sisa stok (JUMLAH_MELEBIHI_SISA), dst. Ini penolakan yang didokumentasikan, bukan bug kontrak.
 [[operations]]
-include-name = "POST /pantry/items"
+include-path-regex = "^/pantry/"
+include-method = "POST"
 checks.positive_data_acceptance.expected-statuses = [
   "2xx", "3xx", "401", "403", "404", "409", "429", "5xx", "422",
 ]
+
+# NUL (U+0000) tidak bisa disimpan di teks Postgres; backend memetakannya ke 400 (diuji unit,
+# lihat tests/auth.rs dan tests/pantry.rs), jadi generator tidak perlu membuatnya.
+[generation]
+allow-x00 = false

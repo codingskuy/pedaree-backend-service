@@ -419,7 +419,7 @@ paths:
       summary: Batch mendekati kedaluwarsa (urut FEFO)
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
-        - { name: dalamHari, in: query, schema: { type: integer, minimum: 0, default: 7 } }
+        - { name: dalamHari, in: query, schema: { type: integer, minimum: 0, maximum: 3650, default: 7 } }
       responses:
         '200':
           description: Daftar terurut tanggal kedaluwarsa terdekat.
