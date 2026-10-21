@@ -1,6 +1,6 @@
 use pedaree_backend_service::config::Config;
 use pedaree_backend_service::state::AppState;
-use pedaree_backend_service::{db, rute};
+use pedaree_backend_service::{cli, db, rute};
 
 #[tokio::main]
 async fn main() {
@@ -10,6 +10,17 @@ async fn main() {
                 .unwrap_or_else(|_| "info,sqlx=warn".into()),
         )
         .init();
+
+    // Subperintah operator (ADR-0011): tidak menjalankan server.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match cli::urai(&args) {
+        Ok(None) => {}
+        Ok(Some(perintah)) => return jalankan_perintah(perintah).await,
+        Err(pesan) => {
+            eprintln!("{pesan}");
+            std::process::exit(2);
+        }
+    }
 
     let config = Config::dari_env().expect("konfigurasi tidak valid");
     let pool = db::sambung(&config.database_url)
@@ -49,4 +60,33 @@ async fn main() {
         .expect("gagal mengikat port");
     tracing::info!(alamat = %config.bind_addr, "pedaree-backend-service berjalan");
     axum::serve(pendengar, app).await.expect("server berhenti");
+}
+
+async fn jalankan_perintah(perintah: cli::Perintah) {
+    let cli::Perintah::BuatAkun(permintaan) = perintah;
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        eprintln!("DATABASE_URL wajib diatur");
+        std::process::exit(2);
+    });
+    let sandi = cli::baca_kata_sandi().unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(2);
+    });
+    let pool = db::sambung(&url).await.unwrap_or_else(|e| {
+        eprintln!("gagal menyambung ke basis data: {e}");
+        std::process::exit(1);
+    });
+    db::migrasi(&pool).await.expect("migrasi gagal");
+    match cli::buat_akun(&pool, &permintaan, &sandi, &argon2::Argon2::default()).await {
+        Ok(a) => println!(
+            "akun dibuat: pengguna={} household={}{}",
+            a.pengguna_id,
+            a.household_id,
+            if a.household_baru { " (baru)" } else { "" }
+        ),
+        Err(e) => {
+            eprintln!("gagal membuat akun: {e}");
+            std::process::exit(1);
+        }
+    }
 }
