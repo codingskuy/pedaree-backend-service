@@ -1,5 +1,7 @@
 # ADR-0008 — Sinyal `pedaree.stok.v1` lewat outbox; dedup 1 per item per 24 jam lintas jenis
 
+Dilengkapi oleh ADR-0010 (lingkup dedup per item untuk TitipO; per jenis hanya data internal).
+
 Status: Diterima | Tanggal: 2026-10-21
 
 ## Konteks
