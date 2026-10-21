@@ -31,5 +31,5 @@ yang sama (ditegakkan di lapisan layanan mulai PDR-BE-004).
 
 `sinyal.rs` menentukan transisi menipis/habis setelah mutasi dan menulis outbox `sinyal_stok` pada
 transaksi yang sama; `pengirim.rs` mengirim ke `POST /sinyal/pedaree-stok` (`X-Service-Key`) dengan
-retry 5/30/300 detik lalu DLQ, dan menjalankan `expiry-sweep` harian 06:00 WIB. Dedup 1 sinyal per item
-per 24 jam (ADR-0008, ADR-0009). Hanya anjuran restock; tidak ada pembuatan pesanan.
+retry 5/30/300 detik lalu DLQ, dan menjalankan `expiry-sweep` harian 06:00 WIB. Dedup 1 sinyal per item per
+jenis per 24 jam, kunci idempoten `item_id + jenis + tanggal` (ADR-0008, ADR-0009, ADR-0010). Hanya anjuran restock; tidak ada pembuatan pesanan.

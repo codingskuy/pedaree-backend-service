@@ -1,6 +1,6 @@
 # ADR-0010 — Lingkup dedup sinyal (per item untuk TitipO) dan verifikasi kunci idempoten `item_id + tanggal`
 
-Status: Diterima | Tanggal: 2026-10-21
+Status: Diterima; keputusan 1 dan 3 DIGANTI oleh bagian Pembaruan di bawah | Tanggal: 2026-10-21
 
 ## Konteks
 
@@ -40,3 +40,18 @@ Sumber: TitipO `pesanan/10-alur-titip-harian.md` §1-§2 dan §6, `pesanan/20-mo
 
 - Tidak ada perubahan kode atau kontrak API dalam ADR ini.
 - Keputusan manusia yang masih terbuka: apakah eskalasi jenis dalam satu hari harus sampai ke TitipO (butuh perubahan kunci di kedua sisi).
+
+## Pembaruan 2026-10-21 — dedup per jenis dan kunci `item_id + jenis + tanggal` (keputusan user, final)
+
+Menutup keputusan manusia yang terbuka di atas. Bagian lama dipertahankan sebagai riwayat.
+
+1. Dedup produsen PER JENIS: `stok.menipis`, `stok.habis`, dan `kedaluwarsa.dekat` masing-masing maksimal 1 sinyal per item per 24 jam. Kasus contoh (minimum 250 g, 500 -> 200 g pukul 08:00, lalu -> 0 pukul 19:00) kini menghasilkan DUA sinyal (kolom "per jenis" pada tabel di atas).
+2. Kunci idempoten konsumen menjadi `item_id + jenis + tanggal` (tanggal kalender WIB). Duplikat tetap `200 duplikat_diabaikan`.
+3. Implementasi: kueri dedup di `sinyal::antrekan` menambah `jenis = $3`; migrasi `006_sinyal_kunci_jenis` menambah indeks unik `(item_id, jenis, tanggal)` pada `sinyal_stok`; uji: `menipis_pagi_lalu_habis_malam_hari_sama_menghasilkan_dua_sinyal` dan `maksimal_satu_sinyal_per_item_per_jenis_per_24_jam`. Efek samping: `kedaluwarsa.dekat` dari sweep 06:00 tidak lagi ditekan oleh sinyal menipis/habis item yang sama.
+4. Batasan kunci: dua sinyal jenis sama hanya lolos bila berjarak >= 24 jam, sehingga `tanggal` WIB pasti berbeda; indeks unik aman bagi data lama (dedup lama lebih ketat).
+
+### Konsumen kunci lama (bukti per 2026-10-21)
+
+- Produksi: BELUM ADA konsumen produksi kunci `item_id + tanggal`. `titipo-backend-service` upstream `main` tidak punya handler `/sinyal/pedaree-stok` (hanya openapi); implementasi penerima baru ada di PR #12 (branch `feat/ttp-be-005-sinyal-pedaree-stok`, belum merge) dengan `ON CONFLICT (item_id, tanggal) DO NOTHING` pada tabel `sinyal_restock`. Tidak ada rilis/tag di kedua repo; `titipo-infra-devops` tidak menyebut Pedaree/sinyal; tidak ada data sinyal produksi. Pedaree sendiri belum mengirim ke produksi.
+- Maka masa baca ganda 30 hari (dual-read) TIDAK perlu: tidak ada data/penerima produksi yang berkunci lama. Yang wajib: PR #12 TitipO diubah ke `ON CONFLICT (item_id, jenis, tanggal)` sebelum merge; bila tidak, `stok.habis` sesudah `stok.menipis` di hari yang sama dijawab `200 duplikat_diabaikan` dan eskalasi hilang tanpa tanda.
+- Perubahan dokumen TownHall (KONTEKS-LINTAS-DIVISI §3.1, TitipO `pesanan/10` §6) bukan bagian PR ini; usulannya ditangani terpisah oleh manajer.
