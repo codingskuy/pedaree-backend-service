@@ -156,6 +156,19 @@ async fn login_nama_tidak_peka_huruf_dan_validasi_400(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn login_dengan_karakter_nul_menjawab_400_bukan_500(db: PgPool) {
+    // Temuan Schemathesis: NUL (U+0000) tidak dapat disimpan di teks Postgres -> dulu 500.
+    let (app, _) = siapkan(&db).await;
+    let (s, j) = post(
+        &app,
+        "/auth/login",
+        json!({"idPengguna": "bu\u{0}di", "kataSandi": "rahasia-banget-123"}),
+    )
+    .await;
+    assert_eq!((s, j["kode"].as_str()), (400, Some("VALIDASI_GAGAL")), "{j}");
+}
+
+#[sqlx::test]
 async fn pengguna_nonaktif_tidak_bisa_login(db: PgPool) {
     let (app, _) = siapkan(&db).await;
     sqlx::query("UPDATE pengguna SET aktif = FALSE")

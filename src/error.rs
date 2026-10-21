@@ -121,6 +121,10 @@ impl From<sqlx::Error> for AppError {
                 Some("23505") => {
                     return Self::konflik("Data dengan nilai unik yang sama sudah ada");
                 }
+                // character_not_in_repertoire: NUL (U+0000) pada teks tidak dapat disimpan.
+                Some("22021") => {
+                    return Self::validasi("Teks tidak boleh mengandung karakter NUL", None);
+                }
                 Some("PDI01") => {
                     return Self::tak_terproses(
                         "BATAS_ITEM_AKTIF",

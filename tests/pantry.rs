@@ -1067,6 +1067,19 @@ async fn daftar_item_menghitung_stok_status_filter_dan_paginasi(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn opname_dengan_karakter_nul_menjawab_400_bukan_500(db: PgPool) {
+    // Temuan Schemathesis: NUL pada pantryItemId memicu galat Postgres 22021 -> dulu 500.
+    let k = Klien::baru(&db).await;
+    let (s, j) = k
+        .post(
+            "/pantry/opname",
+            json!({"pantryItemId": "itm_\u{0}x", "stokFisik": 10, "satuan": "gram", "alasan": "uji"}),
+        )
+        .await;
+    assert_eq!((s, j["kode"].as_str()), (400, Some("VALIDASI_GAGAL")), "{j}");
+}
+
+#[sqlx::test]
 async fn daftar_item_kursor_kosong_dianggap_tidak_ada(db: PgPool) {
     // Temuan Schemathesis (PDR-BE-TEST-SCHEMATHESIS): klien web lazim mengirim `cursor=` kosong
     // pada halaman pertama; itu harus sama dengan tanpa kursor, bukan 400.
