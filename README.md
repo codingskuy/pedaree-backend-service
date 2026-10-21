@@ -62,3 +62,31 @@ Kontrak REST v1 ditulis sebagai OpenAPI 3.1 di [`docs/api/openapi.yaml`](docs/ap
 - Lokal: `bun x serve docs/api` lalu buka alamat yang dicetak (mis. http://localhost:3000).
 - Validasi: `bun x @redocly/cli@latest lint docs/api/openapi.yaml`.
 - Kontrak hanya berubah lewat bump versi + ADR baru di `docs/decisions/`; sumbernya `produk/20`, `produk/21`, dan BRD `30-demand-metrik.md` di Pedaree-TownHall v1.0.0.
+
+## Uji properti API (Schemathesis)
+
+`scripts/schemathesis.sh` menjalankan [Schemathesis](https://schemathesis.readthedocs.io) terhadap
+backend lokal memakai `docs/api/openapi.yaml` (tiket PDR-BE-TEST-SCHEMATHESIS). Skrip membuat
+basis data sementara `pedaree_schemathesis`, kunci Ed25519 sementara, akun uji lewat
+`buat-akun` (ADR-0011) dengan household `hh_01J9Z8QK2M4B`, menjalankan server, login, lalu menguji.
+Semua dibersihkan saat selesai; tidak ada rahasia di repo. Telemetri mati
+(`E2E_TELEMETRY_DISABLED=1`, tanpa `--report schemathesis`); tidak ada panggilan ke layanan luar.
+
+```bash
+uv tool install schemathesis        # sekali saja (diuji dengan 4.32.3)
+make schemathesis                   # atau: ./scripts/schemathesis.sh
+MAX_EXAMPLES=100 ST_EXTRA="--seed 1" ./scripts/schemathesis.sh
+```
+
+Prasyarat: Postgres lokal yang bisa `createdb`/`dropdb` (`PGHOST`, `PGUSER` bila perlu), `openssl`, `cargo`.
+
+Cakupan dan batas yang perlu diketahui:
+
+- Operasi yang belum diimplementasikan server dikecualikan lewat `ST_EXCLUDE_PATHS`
+  (`/demand/*`, `/web/*`); tambahkan kembali begitu endpoint hadir.
+- `schemathesis.toml`: 422 bisnis (satuan, batas 50.000 g/ml, sisa stok) diterima sebagai penolakan
+  terdokumentasi pada `POST /pantry/*`; generator tidak membuat NUL (U+0000), yang dipetakan
+  server ke 400 dan diuji unit.
+- Operasi yang butuh ID nyata (`consume`, `opname`, `pindah`, `buang`, `GET /pantry/items/{id}`)
+  sebagian besar menerima 404 karena ID acak; jalur sukses dicakup uji integrasi `cargo test`,
+  bukan Schemathesis. Fase stateful belum dinyalakan.
