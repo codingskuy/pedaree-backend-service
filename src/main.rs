@@ -29,6 +29,19 @@ async fn main() {
         }
     });
 
+    // Outbox sinyal ke TitipO + expiry-sweep harian 06:00 WIB.
+    match pedaree_backend_service::pengirim::Tujuan::dari_config(&config) {
+        Some(tujuan) => {
+            tokio::spawn(pedaree_backend_service::pengirim::jalankan_pengirim(pool.clone(), tujuan));
+        }
+        None => tracing::warn!(
+            "TITIPO_BASE_URL/PEDAREE_SERVICE_KEY belum diatur: sinyal menumpuk di outbox, belum terkirim"
+        ),
+    }
+    tokio::spawn(pedaree_backend_service::pengirim::jalankan_expiry_sweep(
+        pool.clone(),
+    ));
+
     let state = AppState::baru(pool, config.clone()).expect("kunci JWT tidak valid");
     let app = rute(state);
     let pendengar = tokio::net::TcpListener::bind(&config.bind_addr)

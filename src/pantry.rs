@@ -26,6 +26,7 @@ use crate::model::{
 use crate::satuan::{
     self, dapat_dikonversi, ke_simpan_x10, periksa_batas, satuan_sah_untuk, tampil, Satuan,
 };
+use crate::sinyal;
 use crate::state::AppState;
 use crate::waktu::hari_ini_wib;
 
@@ -714,6 +715,8 @@ async fn catat_pakai(
         None => "Pakai FEFO".to_owned(),
     };
     let mut disentuh = HashSet::new();
+    // Stok yang dapat dipakai sebelum pemakaian, per item (untuk memicu sinyal menipis/habis).
+    let mut stok_sebelum: Vec<(String, i64)> = Vec::new();
     let mut terpotong = Vec::new();
     let mut kurang = Vec::new();
     for (i, baris) in req.pemakaian.iter().enumerate() {
@@ -724,6 +727,10 @@ async fn catat_pakai(
             .map_err(|e| e.ke_app(&field))?;
         periksa_batas(simpan, sisa_x10).map_err(|e| e.ke_app(&field))?;
 
+        if !stok_sebelum.iter().any(|(id, _)| *id == item.id) {
+            let sebelum = stok_dapat_dipakai(&mut tx, &item.id, ctx.hari_ini).await?;
+            stok_sebelum.push((item.id.clone(), sebelum));
+        }
         let batches = batch_fefo(&mut tx, &item.id, ctx.hari_ini).await?;
         if batches.is_empty() && disentuh.insert(item.id.clone()) {
             // Stok nol (atau hanya batch kedaluwarsa): tolak seluruh permintaan.
@@ -763,6 +770,19 @@ async fn catat_pakai(
                 satuan_simpan: simpan.as_str().to_owned(),
             });
         }
+    }
+    // Sinyal pedaree.stok.v1 ditulis ke outbox pada transaksi yang sama dengan mutasi.
+    for (id, sebelum) in &stok_sebelum {
+        let sesudah = stok_dapat_dipakai(&mut tx, id, ctx.hari_ini).await?;
+        sinyal::setelah_mutasi(
+            &mut tx,
+            &kartu[id],
+            *sebelum,
+            sesudah,
+            req.sumber_resep_id.as_deref(),
+            ctx.sekarang,
+        )
+        .await?;
     }
     selesai(
         tx,
@@ -871,6 +891,10 @@ async fn opname(
             )
             .await?,
         );
+    }
+    if selisih != 0 {
+        let sesudah = stok_dapat_dipakai(&mut tx, &item.id, ctx.hari_ini).await?;
+        sinyal::setelah_mutasi(&mut tx, &item, catat_x10, sesudah, None, ctx.sekarang).await?;
     }
     let badan = HasilMutasiList {
         mutasi: hasil.iter().map(MutasiStok::from).collect(),
@@ -988,6 +1012,7 @@ async fn buang_batch(
             Some("jumlah"),
         ));
     }
+    let stok_sebelum = stok_dapat_dipakai(&mut tx, &item.id, ctx.hari_ini).await?;
     let mutasi = kurangi_batch(
         &mut tx,
         &ctx,
@@ -997,6 +1022,16 @@ async fn buang_batch(
         req.alasan.as_str(),
         None,
         "DIBUANG",
+    )
+    .await?;
+    let stok_sesudah = stok_dapat_dipakai(&mut tx, &item.id, ctx.hari_ini).await?;
+    sinyal::setelah_mutasi(
+        &mut tx,
+        &item,
+        stok_sebelum,
+        stok_sesudah,
+        None,
+        ctx.sekarang,
     )
     .await?;
     selesai(tx, &kunci, StatusCode::OK, &MutasiStok::from(&mutasi)).await

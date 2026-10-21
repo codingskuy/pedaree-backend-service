@@ -10,7 +10,9 @@ pub mod error;
 pub mod idempotensi;
 pub mod model;
 pub mod pantry;
+pub mod pengirim;
 pub mod satuan;
+pub mod sinyal;
 pub mod state;
 pub mod waktu;
 
