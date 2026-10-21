@@ -83,7 +83,7 @@ Prasyarat: Postgres lokal yang bisa `createdb`/`dropdb` (`PGHOST`, `PGUSER` bila
 Cakupan dan batas yang perlu diketahui:
 
 - Operasi yang belum diimplementasikan server dikecualikan lewat `ST_EXCLUDE_PATHS`
-  (`/demand/*`, `/web/*`); tambahkan kembali begitu endpoint hadir.
+  (`/demand/*`, `/web/*` selain `/web/dashboard`); tambahkan kembali begitu endpoint hadir.
 - `schemathesis.toml`: 422 bisnis (satuan, batas 50.000 g/ml, sisa stok) diterima sebagai penolakan
   terdokumentasi pada `POST /pantry/*`; generator tidak membuat NUL (U+0000), yang dipetakan
   server ke 400 dan diuji unit.

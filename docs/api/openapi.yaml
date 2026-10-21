@@ -494,10 +494,20 @@ paths:
       tags: [Web]
       operationId: dasborWeb
       summary: Ringkasan dasbor web (SSR)
-      description: Diakses SSR server-ke-server memakai service key, bukan token pengguna.
+      description: |
+        Diakses SSR server-ke-server memakai `X-Service-Key` + `X-Household-Id`; token pengguna
+        (Bearer) juga diterima. Cookie sesi belum didukung server pada v1.0.0.
+
+        Metrik diturunkan dari buku mutasi (`metrik/10-stockout-dan-waste.md`); ASUMSI:
+        stok historis dihitung ulang dari `mutasi_stok` per akhir hari WIB (tanpa tabel snapshot),
+        hanya item yang kini tidak diarsip; `stockoutRate` = 100 x item HABIS / item aktif per hari;
+        waste dalam gram (ml dihitung 1:1, satuan hitung memakai bobot acuan, baris tak dapat
+        dikonversi dilewati) untuk bulan berjalan + 2 bulan sebelumnya; "paling sering habis" =
+        jumlah episode HABIS dalam 90 hari lalu jumlah hari HABIS; `segeraKedaluwarsa3Hari` =
+        batch berisi dengan kedaluwarsa 0 sampai 3 hari dari hari ini.
       security:
         - serviceKey: []
-        - cookieAuth: []
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/XHouseholdId'
       responses:
@@ -1023,7 +1033,7 @@ components:
         recipe_id: { type: [string, 'null'], description: "ID resep Pawonee; boleh kosong; hanya rujukan tampilan." }
     DasborWeb:
       type: object
-      required: [totalItemAktif, menipis, habis, segeraKedaluwarsa3Hari, wasteBulanGram, sinyalTerkirim7Hari]
+      required: [totalItemAktif, menipis, habis, segeraKedaluwarsa3Hari, wasteBulanGram, sinyalTerkirim7Hari, stockoutRate90Hari, stockoutRateRata90Hari, wastePerKategori, itemSeringHabis]
       properties:
         totalItemAktif: { type: integer, minimum: 0 }
         menipis: { type: integer, minimum: 0 }
@@ -1031,6 +1041,41 @@ components:
         segeraKedaluwarsa3Hari: { type: integer, minimum: 0 }
         wasteBulanGram: { type: number, minimum: 0, description: Waste bulan berjalan dalam gram (target kurang dari 1.500 g per rumah tangga per bulan). }
         sinyalTerkirim7Hari: { type: integer, minimum: 0 }
+        stockoutRate90Hari:
+          type: array
+          description: Satu titik per hari WIB, 90 hari berakhir hari ini, urut tanggal naik. Untuk grafik garis dasbor web.
+          items:
+            type: object
+            required: [tanggal, stockoutRate]
+            properties:
+              tanggal: { type: string, format: date }
+              stockoutRate: { type: number, minimum: 0, maximum: 100, description: "Persen item HABIS dari item aktif hari itu (1 desimal); 0 bila tidak ada item aktif." }
+        stockoutRateRata90Hari: { type: number, minimum: 0, maximum: 100, description: Rata-rata stockoutRate harian 90 hari (target kurang dari atau sama dengan 8). }
+        wastePerKategori:
+          type: array
+          description: Waste gram per bulan WIB dan kategori, bulan berjalan + 2 bulan sebelumnya; hanya baris bernilai. Urut bulan lalu kategori.
+          items:
+            type: object
+            required: [bulan, kategori, wasteGram]
+            properties:
+              bulan: { type: string, pattern: '^[0-9]{4}-[0-9]{2}$', examples: ['2026-10'] }
+              kategori: { $ref: '#/components/schemas/Kategori' }
+              wasteGram: { type: number, minimum: 0 }
+        itemSeringHabis:
+          type: array
+          maxItems: 10
+          description: Sampai 10 item paling sering habis dalam 90 hari (episode HABIS, lalu hari HABIS, lalu nama).
+          items:
+            type: object
+            required: [pantryItemId, nama, kategori, kejadianHabis, hariHabis, stokMinimum, satuanTampil]
+            properties:
+              pantryItemId: { type: string }
+              nama: { type: string }
+              kategori: { $ref: '#/components/schemas/Kategori' }
+              kejadianHabis: { type: integer, minimum: 1 }
+              hariHabis: { type: integer, minimum: 1, maximum: 90 }
+              stokMinimum: { type: number, minimum: 0, description: Stok minimum dalam satuanTampil (untuk tombol Naikkan minimum). }
+              satuanTampil: { $ref: '#/components/schemas/Satuan' }
     ImporCsvHasil:
       type: object
       required: [diterima, ditolak, galatBaris]

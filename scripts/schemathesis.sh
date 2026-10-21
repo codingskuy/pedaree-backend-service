@@ -54,7 +54,7 @@ TOKEN="$(curl -fs -X POST "http://127.0.0.1:${PORT}/auth/login" -H 'content-type
   -d "{\"idPengguna\":\"penguji-schemathesis\",\"kataSandi\":\"${SANDI}\"}" | python3 -c 'import sys,json; print(json.load(sys.stdin)["tokenAkses"])')"
 
 # Operasi yang belum diimplementasikan server dikecualikan (404 RUTE_TIDAK_ADA); lihat README bagian Schemathesis.
-EXCLUDE=(${ST_EXCLUDE_PATHS:-/web/dashboard /demand/signals /demand/titipo /web/import/csv /web/export/csv /web/export/mutasi /web/titipo/parcels '/web/titipo/parcels/{id}/draft-masuk'})
+EXCLUDE=(${ST_EXCLUDE_PATHS:-/demand/signals /demand/titipo /web/import/csv /web/export/csv /web/export/mutasi /web/titipo/parcels '/web/titipo/parcels/{id}/draft-masuk'})
 ARGS=()
 for p in "${EXCLUDE[@]}"; do ARGS+=(--exclude-path "$p"); done
 
