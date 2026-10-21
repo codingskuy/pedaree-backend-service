@@ -11,3 +11,4 @@ Format mengikuti Keep a Changelog; versi mengikuti TownHall.
 
 ### Diubah
 - Axum 0.7.9 naik ke 0.8 (path `{id}`); skema datar template diganti skema batch FEFO; `001_init.sql` menjadi pasangan `.up.sql`/`.down.sql` (isi tidak berubah).
+- PDR-BE-003: auth `POST /auth/login` dan `/auth/refresh`; JWT akses Ed25519 15 menit audiens `pedaree`, refresh 7 hari sekali pakai dengan reuse-detection (cabut seluruh refresh pengguna), argon2id, ekstraktor `Pengguna` (validasi audiens/penerbit/`X-Household-Id`), konfigurasi service key lewat env (ADR-0004, `docs/auth.md`).

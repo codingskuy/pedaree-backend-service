@@ -92,7 +92,11 @@ paths:
       tags: [Auth]
       operationId: login
       summary: Masuk dan terima token akses + refresh
-      description: Mengembalikan JWT akses (15 menit) dan refresh (7 hari) dengan audiens `pedaree`.
+      description: |
+        Mengembalikan JWT akses (15 menit, Ed25519, audiens `pedaree`, klaim `hh` = rumah tangga)
+        dan refresh token buram (7 hari, sekali pakai, hanya hash-nya disimpan server).
+        Kredensial salah atau akun tidak aktif dijawab `401 TIDAK_SAH` dengan badan yang sama
+        (tidak membocorkan keberadaan akun). Kata sandi disimpan sebagai argon2id.
       security: []
       requestBody:
         required: true
@@ -116,8 +120,11 @@ paths:
       operationId: refreshToken
       summary: Tukar refresh token dengan pasangan token baru
       description: |
-        Refresh token sekali pakai. Bila token lama dipakai ulang (reuse-detection), seluruh
-        keluarga refresh pengguna dicabut dan pengguna wajib login ulang (`401`).
+        Refresh token sekali pakai; tiap pemakaian merotasi token dalam keluarga yang sama.
+        Bila token lama dipakai ulang (reuse-detection), seluruh refresh milik pengguna dicabut
+        dan pengguna wajib login ulang: `401` dengan `kode: REFRESH_DIPAKAI_ULANG`. Refresh
+        kedaluwarsa dijawab `401 REFRESH_KEDALUWARSA`; token tak dikenal `401 TIDAK_SAH`.
+        Respons `409` tidak dipakai implementasi v1.0.0 (reuse dijawab `401`).
       security: []
       requestBody:
         required: true
@@ -693,7 +700,7 @@ components:
           schema: { $ref: '#/components/schemas/AppError' }
           example: { kode: VALIDASI_GAGAL, pesan: Field jumlah wajib diisi, field: jumlah }
     TidakSah:
-      description: 401 — token atau sesi tidak sah atau audiens bukan `pedaree`.
+      description: '401 — token atau sesi tidak sah, audiens bukan `pedaree`, atau `X-Household-Id` tidak sama dengan klaim `hh` token (kode `HOUSEHOLD_TIDAK_COCOK`).'
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AppError' }
